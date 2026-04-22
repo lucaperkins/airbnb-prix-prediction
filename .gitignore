@@ -1,0 +1,12 @@
+# Données trop lourdes pour GitHub (>100MB)
+airbnb_train.csv
+airbnb_test.csv
+
+# Fichiers système
+.DS_Store
+~$*.docx
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
