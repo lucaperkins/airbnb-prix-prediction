@@ -13,9 +13,9 @@
 2. [Description des données](#2-description-des-données)
 3. [Exploration qualitative](#3-exploration-qualitative)
 4. [Feature Engineering](#4-feature-engineering)
-5. [Modélisation](#5-modélisation) *(à venir)*
-6. [Résultats et comparaison des modèles](#6-résultats-et-comparaison-des-modèles) *(à venir)*
-7. [Prédiction finale](#7-prédiction-finale) *(à venir)*
+5. [Modélisation](#5-modélisation)
+6. [Optimisation & Prédiction finale](#6-optimisation--prédiction-finale)
+7. [Prédiction finale](#7-prédiction-finale)
 
 ---
 
@@ -227,10 +227,7 @@ Les NaN (logements sans avis ou hôte sans date) sont imputés par la médiane c
 
 ### 4.4 `TextFeatures`
 
-Extrait des informations simples depuis les colonnes texte `description` et `name`.
-
-**`description_length` et `name_length`**  
-Nombre de caractères. Un hôte qui soigne sa description est généralement plus professionnel et tend à proposer des logements de meilleure qualité.
+Extrait une information simple depuis les colonnes texte `description` et `name`.
 
 **`has_luxury_keyword`**  
 Flag binaire : vaut 1 si le titre ou la description contient un mot-clé premium (`luxury`, `penthouse`, `villa`, `designer`, `panoramic`…). Ces logements tendent à afficher des prix plus élevés.
@@ -254,24 +251,23 @@ On combine des variables existantes pour créer de nouvelles features potentiell
 |---|---|---|
 | `beds_per_person` | `beds` / `accommodates` | Confort relatif : 1 lit par personne vs 0.5 lit par personne |
 | `bathrooms_per_person` | `bathrooms` / `accommodates` | Confort relatif des sanitaires |
-| `reviews_per_bedroom` | `number_of_reviews` / `bedrooms` | Popularité relative par rapport à la taille |
 
 La division utilise `.replace(0, 1)` pour éviter les divisions par zéro.
 
 ### 4.7 Récapitulatif — Matrix de features finale (X)
 
-Après toutes les transformations, X contient **52 features**, sans aucun NaN.
+Après toutes les transformations, X contient **48 features**, sans aucun NaN.
 
 | Groupe | Nombre de features | Exemples |
 |---|---|---|
 | Variables de base | 17 | `property_type`, `room_type`, `city`, `accommodates`, `bathrooms`… |
 | Amenities | 21 | `amenities_count`, `am_wifi`, `am_tv`, `am_kitchen`… |
 | Temporelles | 4 | `host_experience_days`, `days_since_last_review`, `has_reviews`… |
-| Texte | 3 | `description_length`, `name_length`, `has_luxury_keyword` |
+| Texte | 1 | `has_luxury_keyword` |
 | Géographie | 1 | `neighbourhood` |
 | Flags NaN | 2 | `review_scores_rating_is_null`, `host_response_rate_is_null` |
-| Dérivées | 3 | `beds_per_person`, `bathrooms_per_person`, `reviews_per_bedroom` |
-| **Total** | **52** | |
+| Dérivées | 2 | `beds_per_person`, `bathrooms_per_person` |
+| **Total** | **48** | |
 
 Les colonnes exclues de X : `id` (identifiant sans info prédictive), `log_price` (c'est la cible `y`), `amenities` (déjà traitée), `zipcode` (redondant avec lat/lon et neighbourhood).
 
@@ -281,40 +277,42 @@ Les colonnes exclues de X : `id` (identifiant sans info prédictive), `log_price
 
 ### 5.1 Protocole d'évaluation
 
-Toutes les expériences utilisent le même split **75% train / 25% validation** (`random_state=42` pour la reproductibilité). On mesure le R² sur les deux ensembles pour détecter l'overfitting.
+Toutes les expériences utilisent le même split **75% train / 25% validation** (`random_state=98` pour la reproductibilité). On mesure le R² sur les deux ensembles pour détecter l'overfitting.
 
-### 5.2 Résultats des expériences
+### 5.2 Expériences
 
-| Expérience | Modèle | Features | R² Train | R² Val |
-|---|---|---|---|---|
-| Exp1 — Baseline | LinearSVR | 3 (property_type, accommodates, bathrooms) | 0.328 | 0.321 |
-| Exp2 — Features de base | RandomForest | 18 (base encodées) | 0.954 | 0.659 |
-| Exp3 — + Amenities | RandomForest | 39 (+ amenities) | 0.956 | 0.672 |
-| Exp4 — + Temporel | RandomForest | 45 (+ dates/activité) | 0.956 | 0.675 |
-| Exp5 — Features complètes | HistGradientBoosting | 52 (toutes) | 0.789 | 0.695 |
+**Expérience 1 — Baseline**
 
-### 5.3 Comparaison des modèles (feature set complet — 52 features)
+Reproduction du notebook fourni : LinearSVR avec seulement 3 features.
+
+| Modèle | Features | R² Train | R² Val |
+|---|---|---|---|
+| LinearSVR | 3 (property_type, accommodates, bathrooms) | ~0.33 | ~0.32 |
+
+**Expérience 2 — Feature set complet, comparaison de modèles**
+
+On utilise les **48 features** construites en Partie 2 et on teste 5 modèles différents.
 
 | Modèle | R² Train | R² Val | Overfitting |
 |---|---|---|---|
-| Ridge | 0.588 | 0.586 | Faible |
-| RandomForest (100) | 0.956 | 0.678 | Fort |
-| GradientBoosting | 0.725 | 0.684 | Modéré |
-| **HistGradientBoosting** | **0.789** | **0.695** | **Faible** |
-| KNeighbors (k=10) | 0.163 | -0.029 | N/A |
+| Ridge | ~0.59 | ~0.58 | Faible |
+| RandomForest (100) | ~0.95 | ~0.67 | Fort |
+| GradientBoosting | ~0.72 | ~0.68 | Modéré |
+| **HistGradientBoosting** | **~0.79** | **~0.69** | **Faible** |
+| KNeighbors (k=10) | ~0.16 | ~-0.03 | N/A |
 
-### 5.4 Choix du modèle final : HistGradientBoostingRegressor
+### 5.3 Choix du modèle final : HistGradientBoostingRegressor
 
 **HistGradientBoosting** est retenu car il offre :
-- Le meilleur R² de validation (0.695)
-- Le moins d'overfitting (écart train/val = 0.094 contre 0.278 pour RandomForest)
+- Le meilleur R² de validation
+- Le moins d'overfitting (écart train/val le plus faible parmi les modèles performants)
 - Une robustesse aux valeurs manquantes (gestion native)
 
 **Rejeté — Ridge** : modèle linéaire, sous-performe car les relations prix-features sont non-linéaires.  
-**Rejeté — KNeighbors** : très mauvais en haute dimension (*curse of dimensionality* sur 52 features).  
+**Rejeté — KNeighbors** : très mauvais en haute dimension (*curse of dimensionality* sur 48 features).  
 **Rejeté — RandomForest** : fort overfitting malgré de bonnes performances de validation.
 
-### 5.5 Features les plus importantes (RandomForest)
+### 5.4 Features les plus importantes (RandomForest)
 
 1. `room_type` — type du logement (entier vs chambre privée)
 2. `accommodates` — capacité d'accueil
@@ -327,7 +325,7 @@ Toutes les expériences utilisent le même split **75% train / 25% validation** 
 9. `host_experience_days` — ancienneté de l'hôte
 10. `cancellation_policy` — politique d'annulation
 
-**Gain total du feature engineering :** R² 0.32 → 0.695 = **+116%**
+**Gain total du feature engineering :** R² ~0.32 (baseline) → ~0.69 (feature set complet)
 
 ---
 
@@ -358,14 +356,11 @@ On vérifie que les erreurs sont aléatoires (pas de biais systématique) :
 
 | Étape | R² Validation |
 |---|---|
-| Baseline (LinearSVR, 3 features) | ~0.321 |
-| + Features de base (18) | ~0.659 |
-| + Amenities (39) | ~0.672 |
-| + Temporel (45) | ~0.675 |
-| HistGradientBoosting (52 features) | ~0.695 |
+| Baseline (LinearSVR, 3 features) | ~0.32 |
+| HistGradientBoosting (48 features) | ~0.69 |
 | **HistGradientBoosting optimisé** | **~0.71+** |
 
-**Gain total : R² 0.32 → ~0.71 = +120%**
+**Gain total : R² ~0.32 → ~0.71**
 
 ## 7. Prédiction finale
 
@@ -373,7 +368,13 @@ Le pipeline complet est appliqué sur `airbnb_test.csv` avec `fit=False` (réuti
 
 **Format de sortie :**
 
-| Colonne | Description |
-|---|---|
-| `id` | Identifiant du logement (depuis prediction_example.csv) |
-| `logpred` | log_price prédit par le modèle optimisé |
+Le fichier suit exactement le format de `prediction_example.csv` : la première colonne contient les IDs (sans nom de colonne) et la deuxième colonne est `logpred`.
+
+```
+,logpred
+14282777,4.78
+17029381,5.12
+...
+```
+
+51 877 lignes au total, validées par `estConforme('MaPredictionFinale.csv')`.
