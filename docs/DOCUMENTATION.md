@@ -256,18 +256,17 @@ La division utilise `.replace(0, 1)` pour éviter les divisions par zéro.
 
 ### 4.7 Récapitulatif — Matrix de features finale (X)
 
-Après toutes les transformations, X contient **48 features**, sans aucun NaN.
+Après toutes les transformations, X contient **49 features**, sans aucun NaN.
 
 | Groupe | Nombre de features | Exemples |
 |---|---|---|
-| Variables de base | 17 | `property_type`, `room_type`, `city`, `accommodates`, `bathrooms`… |
-| Amenities | 21 | `amenities_count`, `am_wifi`, `am_tv`, `am_kitchen`… |
+| Variables de base (dont `neighbourhood`, `latitude`, `longitude`) | 19 | `property_type`, `room_type`, `city`, `accommodates`, `bathrooms`… |
+| Amenities | 21 | `amenities_count`, `am_wireless_internet`, `am_tv`, `am_kitchen`… |
 | Temporelles | 4 | `host_experience_days`, `days_since_last_review`, `has_reviews`… |
 | Texte | 1 | `has_luxury_keyword` |
-| Géographie | 1 | `neighbourhood` |
 | Flags NaN | 2 | `review_scores_rating_is_null`, `host_response_rate_is_null` |
 | Dérivées | 2 | `beds_per_person`, `bathrooms_per_person` |
-| **Total** | **48** | |
+| **Total** | **49** | |
 
 Les colonnes exclues de X : `id` (identifiant sans info prédictive), `log_price` (c'est la cible `y`), `amenities` (déjà traitée), `zipcode` (redondant avec lat/lon et neighbourhood).
 
@@ -287,45 +286,47 @@ Reproduction du notebook fourni : LinearSVR avec seulement 3 features.
 
 | Modèle | Features | R² Train | R² Val |
 |---|---|---|---|
-| LinearSVR | 3 (property_type, accommodates, bathrooms) | ~0.33 | ~0.32 |
+| LinearSVR | 3 (property_type, accommodates, bathrooms) | 0.325 | 0.332 |
 
 **Expérience 2 — Feature set complet, comparaison de modèles**
 
-On utilise les **48 features** construites en Partie 2 et on teste 5 modèles différents.
+On utilise les **49 features** construites en Partie 2 et on teste 5 modèles différents.
 
 | Modèle | R² Train | R² Val | Overfitting |
 |---|---|---|---|
-| Ridge | ~0.59 | ~0.58 | Faible |
-| RandomForest (100) | ~0.95 | ~0.67 | Fort |
-| GradientBoosting | ~0.72 | ~0.68 | Modéré |
-| **HistGradientBoosting** | **~0.79** | **~0.69** | **Faible** |
-| KNeighbors (k=10) | ~0.16 | ~-0.03 | N/A |
+| Ridge | 0.587 | 0.581 | Faible |
+| RandomForest (100) | 0.956 | 0.678 | Fort |
+| GradientBoosting | 0.723 | 0.688 | Faible |
+| **HistGradientBoosting** | **0.821** | **0.706** | **Modéré** |
+| KNeighbors (k=10) | 0.167 | -0.029 | N/A |
 
 ### 5.3 Choix du modèle final : HistGradientBoostingRegressor
 
 **HistGradientBoosting** est retenu car il offre :
-- Le meilleur R² de validation
-- Le moins d'overfitting (écart train/val le plus faible parmi les modèles performants)
+- Le meilleur R² de validation (0.706)
+- Un écart train/val plus modéré que RandomForest (0.12 contre 0.28), même s'il reste plus grand que celui de GradientBoosting ou Ridge
 - Une robustesse aux valeurs manquantes (gestion native)
 
 **Rejeté — Ridge** : modèle linéaire, sous-performe car les relations prix-features sont non-linéaires.  
-**Rejeté — KNeighbors** : très mauvais en haute dimension (*curse of dimensionality* sur 48 features).  
-**Rejeté — RandomForest** : fort overfitting malgré de bonnes performances de validation.
+**Rejeté — KNeighbors** : très mauvais en haute dimension (*curse of dimensionality* sur 49 features).  
+**Rejeté — RandomForest** : fort overfitting (0.956 en train contre 0.678 en validation).
 
 ### 5.4 Features les plus importantes (RandomForest)
 
-1. `room_type` — type du logement (entier vs chambre privée)
-2. `accommodates` — capacité d'accueil
-3. `bedrooms` — nombre de chambres
-4. `latitude` / `longitude` — localisation géographique
-5. `bathrooms` — nombre de salles de bain
-6. `city` — ville
-7. `amenities_count` — nombre d'équipements
-8. `neighbourhood` — quartier
-9. `host_experience_days` — ancienneté de l'hôte
-10. `cancellation_policy` — politique d'annulation
+Top 10 d'après le graphique du notebook (importances RandomForest) :
 
-**Gain total du feature engineering :** R² ~0.32 (baseline) → ~0.69 (feature set complet)
+1. `room_type` — type du logement (entier vs chambre privée), nettement en tête
+2. `bathrooms` — nombre de salles de bain
+3. `longitude` — localisation géographique
+4. `latitude` — localisation géographique
+5. `host_experience_days` — ancienneté de l'hôte
+6. `amenities_count` — nombre d'équipements
+7. `neighbourhood` — quartier
+8. `accommodates` — capacité d'accueil
+9. `bedrooms` — nombre de chambres
+10. `number_of_reviews` — nombre d'avis
+
+**Gain total du feature engineering :** R² 0.33 (baseline) → 0.71 (feature set complet, HistGradientBoosting)
 
 ---
 
@@ -339,12 +340,14 @@ On utilise `RandomizedSearchCV` avec 20 combinaisons aléatoires et une cross-va
 
 | Paramètre | Plage |
 |---|---|
-| `max_iter` | 200 – 600 |
-| `learning_rate` | 0.03 – 0.20 |
-| `max_depth` | 3 – 10 |
-| `min_samples_leaf` | 10 – 60 |
-| `l2_regularization` | 0 – 1.0 |
-| `max_leaf_nodes` | 20 – 60 |
+| `max_iter` | 200, 300, 400, 500 |
+| `learning_rate` | 0.03, 0.05, 0.07, 0.1, 0.15 |
+| `max_depth` | 3, 4, 5, 6, None |
+| `min_samples_leaf` | 10, 20, 30, 40 |
+| `l2_regularization` | 0.0, 0.1, 0.5, 1.0 |
+| `max_leaf_nodes` | 15, 20, 31, 40, None |
+
+Meilleure combinaison : `max_iter=500`, `learning_rate=0.05`, `max_depth=None`, `min_samples_leaf=40`, `max_leaf_nodes=31`, `l2_regularization=0.0`.
 
 ### 6.2 Analyse des résidus
 
@@ -356,11 +359,13 @@ On vérifie que les erreurs sont aléatoires (pas de biais systématique) :
 
 | Étape | R² Validation |
 |---|---|
-| Baseline (LinearSVR, 3 features) | ~0.32 |
-| HistGradientBoosting (48 features) | ~0.69 |
-| **HistGradientBoosting optimisé** | **~0.71+** |
+| Baseline (LinearSVR, 3 features) | 0.332 |
+| HistGradientBoosting (49 features) | 0.706 |
+| **HistGradientBoosting optimisé** | **0.708** |
 
-**Gain total : R² ~0.32 → ~0.71**
+**Gain total : R² 0.33 → 0.71.** Le gain vient presque entièrement du feature engineering ; l'optimisation des hyperparamètres n'apporte que ~0.002, ce qui est dans le bruit.
+
+**Limite connue :** les préprocesseurs (médianes, encodeurs, top-20 amenities) sont ajustés sur tout le fichier d'entraînement *avant* le split 75/25, ce qui introduit une légère fuite dans le score de validation.
 
 ## 7. Prédiction finale
 
